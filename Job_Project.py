@@ -16,7 +16,7 @@ class JobProjectPhase:
         self.pg_conn = psycopg2.connect(
             dbname="trackingdb",
             user="postgres",
-            password="admin",
+            password="admin123",
             host="localhost",
             port="5432"
         )
