@@ -5,10 +5,10 @@ import psycopg2
 class JobProjectPhase:
     def __init__(self):
         # Connexion InfluxDB
+       # Connexion à InfluxDB v1
         self.influx_client = InfluxDBClient(
-            url='http://localhost:8086',
-            token='g9qIG9gnh3lykTb_TKZZipn33PGEsv7hnSSNVPRKWhT6pY0SPL4V_sGR7Is5bCswKyCwb42h_W_b1dePdp-NSw==',
-            org='Zeus Labs'
+            host='localhost',
+            port=8087
         )
         self.bucket = 'events'
 
