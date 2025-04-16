@@ -1,6 +1,7 @@
 import http.server
 import socketserver
 import json
+from influxdb import InfluxDBClient  # ✅ Pour InfluxDB v1
 import time
 import uuid
 import random
@@ -10,10 +11,25 @@ import requests
 PORT = 4000
 
 # Constantes
-TOTAL_USERS = 50  # Nombre d'utilisateurs
-MIN_SESSIONS_PER_USER = 5  # Nombre minimum de sessions par utilisateur
-MAX_SESSIONS_PER_USER = 10  # Nombre maximum de sessions par utilisateur
-PAGES = [f"Page_{i}" for i in range(1, 51)]  # Correction: 50 pages au lieu de 49
+TOTAL_USERS = 50
+MIN_SESSIONS_PER_USER = 5
+MAX_SESSIONS_PER_USER = 10
+PAGES = [f"Page_{i}" for i in range(1, 51)]
+
+# Configuration InfluxDB v1
+INFLUX_HOST = 'localhost'
+INFLUX_PORT = 8087 # ⚠️ Assure-toi que c'est bien le port de ton InfluxDB v1
+INFLUX_DBNAME = 'events'
+INFLUX_USERNAME = 'Feriel'
+INFLUX_PASSWORD = 'admin123'
+
+client = InfluxDBClient(
+    host=INFLUX_HOST,
+    port=INFLUX_PORT,
+    username=INFLUX_USERNAME,
+    password=INFLUX_PASSWORD,
+    database=INFLUX_DBNAME
+)
 
 
 def generate_fake_events():
@@ -105,7 +121,6 @@ def generate_fake_events():
 
     return events
 
-
 def send_event_to_external_server(event):
     url = 'http://localhost:8084/events/events'
     headers = {
@@ -123,6 +138,24 @@ def send_event_to_external_server(event):
         print(f"❌ Erreur lors de l'envoi de l'événement {event['eventInformation']['eventId']}: {e}")
         return 500, str(e)
 
+def write_event_to_influxdb(event):
+    point = {
+        "measurement": "user_event",
+        "tags": {
+            "user": event["user"],
+            "device": event["deviceInformation"]["deviceModel"],
+            "manufacturer": event["deviceInformation"]["manufacturer"],
+            "system": event["deviceInformation"]["systemName"]
+        },
+        "fields": {
+            "event_type": event["eventInformation"]["eventData"]["eventType"],
+            "screen_duration": event["eventInformation"]["timeInformation"]["screenTimeInformation"]["screenEndTime"]
+                               - event["eventInformation"]["timeInformation"]["screenTimeInformation"]["screenStartTime"]
+        },
+        "time": event["eventInformation"]["timeInformation"]["screenTimeInformation"]["screenStartTime"]
+    }
+
+    client.write_points([point])
 
 class FakeDataHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -131,25 +164,23 @@ class FakeDataHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
 
-            # Envoi immédiat de la réponse HTTP
             self.wfile.write(json.dumps({"status": "Processing started"}).encode('utf-8'))
 
-            # Traitement en arrière-plan
             events = generate_fake_events()
             print("\n🚀 Début de l'envoi des événements...\n")
 
             for event in events:
                 send_event_to_external_server(event)
-                time.sleep(0.01)  # Réduction du délai pour accélérer le traitement
+                write_event_to_influxdb(event)
+                time.sleep(0.01)
 
-            print("\n✅ Tous les événements ont été envoyés !\n")
+            print("\n✅ Tous les événements ont été envoyés et stockés dans InfluxDB !\n")
 
         else:
             self.send_response(404)
             self.end_headers()
 
-
-# Démarrer le serveur
+# Lancement du serveur
 with socketserver.TCPServer(("", PORT), FakeDataHandler) as httpd:
     print(f"🌍 Serveur démarré sur http://localhost:{PORT}")
     print(f"🔗 Accédez à http://localhost:{PORT}/generate-fake-data pour lancer la génération")
