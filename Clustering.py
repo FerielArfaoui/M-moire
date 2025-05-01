@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-import matplotlib.pyplot as plt
+import psycopg2
 
 # Connexion à InfluxDB
 client = InfluxDBClient(
@@ -17,17 +17,24 @@ client.switch_database('events')
 # Requête InfluxQL
 query = 'SELECT * FROM "user_event" LIMIT 1000'
 result = client.query(query)
-
-# Conversion en DataFrame
 points = list(result.get_points(measurement='user_event'))
 df = pd.DataFrame(points)
 
-# Affichage avant transformation
-print("Avant One-Hot Encoding :")
+print("Dataframe initial récupéré :")
 print(df.head())
 
 # One-Hot Encoding
 df_encoded = pd.get_dummies(df, columns=['event_type', 'manufacturer', 'system'])
+
+# Colonnes attendues (au cas où elles n’existent pas)
+expected_cols = [
+    'event_type_click', 'event_type_scroll', 'event_type_view',
+    'manufacturer_apple', 'manufacturer_google', 'manufacturer_oneplus', 'manufacturer_samsung',
+    'system_android', 'system_ios'
+]
+for col in expected_cols:
+    if col not in df_encoded.columns:
+        df_encoded[col] = 0
 
 # Agrégation par utilisateur
 aggregation = df_encoded.groupby('user').agg({
@@ -36,7 +43,7 @@ aggregation = df_encoded.groupby('user').agg({
 aggregation['avg_screen_duration'] = df_encoded.groupby('user')['screen_duration'].mean()
 aggregation.reset_index(inplace=True)
 
-print("\nDonnées agrégées par utilisateur :")
+print("Données agrégées :")
 print(aggregation.head())
 
 # Standardisation
@@ -44,63 +51,101 @@ features = aggregation.drop(columns=['user'])
 scaler = StandardScaler()
 features_scaled = scaler.fit_transform(features)
 
-# Phase de détection du nombre optimal de clusters
-inertia = []
-silhouette_scores = []
-k_range = range(2, 11)
+# Détection du nombre optimal de clusters
 best_k = 2
 best_score = -1
-
-for k in k_range:
+for k in range(2, 11):
     kmeans = KMeans(n_clusters=k, random_state=42)
     labels = kmeans.fit_predict(features_scaled)
-    inertia.append(kmeans.inertia_)
     score = silhouette_score(features_scaled, labels)
-    silhouette_scores.append(score)
-    print(f"Silhouette score pour k={k}: {score:.4f}")
     if score > best_score:
-        best_score = score
         best_k = k
+        best_score = score
 
-# Affichage graphique (optionnel mais utile)
-plt.figure(figsize=(12, 6))
-
-# Elbow method
-plt.subplot(1, 2, 1)
-plt.plot(k_range, inertia, marker='o')
-plt.title("Méthode du Coudé (Elbow Method)")
-plt.xlabel("Nombre de clusters")
-plt.ylabel("Inertie")
-
-# Silhouette score
-plt.subplot(1, 2, 2)
-plt.plot(k_range, silhouette_scores, marker='o', color='orange')
-plt.title("Score de Silhouette")
-plt.xlabel("Nombre de clusters")
-plt.ylabel("Silhouette Score")
-
-plt.tight_layout()
-plt.show()
-
-# Appliquer K-Means avec le meilleur k
-print(f"\n Nombre optimal de clusters détecté automatiquement : {best_k}")
+print(f"\nNombre optimal de clusters détecté automatiquement : {best_k}")
 kmeans = KMeans(n_clusters=best_k, random_state=42)
 aggregation['cluster'] = kmeans.fit_predict(features_scaled)
 
-# Affichage des résultats
-print("\nDonnées après clustering :")
-print(aggregation)
+# Connexion à PostgreSQL
+try:
+    conn = psycopg2.connect(
+        dbname="Trackingdb", user="postgres", password="admin123", host="localhost", port="5432"
+    )
+    cursor = conn.cursor()
 
-print("\nRésumé des clusters (moyenne par cluster) :")
-print(aggregation.groupby('cluster').mean(numeric_only=True))
+    # Création de la table si elle n’existe pas
+    create_table_query = """
+    CREATE TABLE IF NOT EXISTS user_clusters (
+        user_id TEXT PRIMARY KEY,
+        cluster INTEGER,
+        screen_duration DOUBLE PRECISION,
+        event_type_click INTEGER,
+        event_type_scroll INTEGER,
+        event_type_view INTEGER,
+        manufacturer_apple INTEGER,
+        manufacturer_google INTEGER,
+        manufacturer_oneplus INTEGER,
+        manufacturer_samsung INTEGER,
+        system_android INTEGER,
+        system_ios INTEGER,
+        avg_screen_duration DOUBLE PRECISION
+    );
+    """
+    cursor.execute(create_table_query)
+    conn.commit()
 
-# Données par cluster
-for cluster in range(best_k):
-    print(f"\nDonnées pour le cluster {cluster} :")
-    print(aggregation[aggregation['cluster'] == cluster])
+    # Requête d’insertion avec upsert (on conflict)
+    insert_query = """
+        INSERT INTO user_clusters (
+            user_id, cluster, screen_duration, event_type_click, event_type_scroll, event_type_view,
+            manufacturer_apple, manufacturer_google, manufacturer_oneplus, manufacturer_samsung,
+            system_android, system_ios, avg_screen_duration
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (user_id) DO UPDATE SET
+            cluster = EXCLUDED.cluster,
+            screen_duration = EXCLUDED.screen_duration,
+            event_type_click = EXCLUDED.event_type_click,
+            event_type_scroll = EXCLUDED.event_type_scroll,
+            event_type_view = EXCLUDED.event_type_view,
+            manufacturer_apple = EXCLUDED.manufacturer_apple,
+            manufacturer_google = EXCLUDED.manufacturer_google,
+            manufacturer_oneplus = EXCLUDED.manufacturer_oneplus,
+            manufacturer_samsung = EXCLUDED.manufacturer_samsung,
+            system_android = EXCLUDED.system_android,
+            system_ios = EXCLUDED.system_ios,
+            avg_screen_duration = EXCLUDED.avg_screen_duration
+    """
 
-# Distribution
-for cluster in range(best_k):
-    count = aggregation[aggregation['cluster'] == cluster].shape[0]
-    print(f"Nombre d'utilisateurs dans le cluster {cluster} : {count}")
+    for _, row in aggregation.iterrows():
+        values = (
+            row['user'],
+            row['cluster'],
+            row.get('screen_duration', 0),
+            row.get('event_type_click', 0),
+            row.get('event_type_scroll', 0),
+            row.get('event_type_view', 0),
+            row.get('manufacturer_apple', 0),
+            row.get('manufacturer_google', 0),
+            row.get('manufacturer_oneplus', 0),
+            row.get('manufacturer_samsung', 0),
+            row.get('system_android', 0),
+            row.get('system_ios', 0),
+            row['avg_screen_duration']
+        )
+        print(f"Insertion : {values}")
+        cursor.execute(insert_query, values)
+
+    conn.commit()
+    print(" Les résultats du clustering ont été insérés dans la table 'user_clusters'.")
+
+except Exception as e:
+    print(f" Erreur lors de l'insertion dans PostgreSQL : {e}")
+
+finally:
+    if cursor:
+        cursor.close()
+    if conn:
+        conn.close()
+
+print("Nettoyage terminé.")
 
