@@ -121,23 +121,23 @@ daily_stats = get_daily_progression()
 
 # Affichage des résultats
 total_users = len(user_progress)
-print(f"👥 Utilisateurs uniques: {total_users}\n")
+print(f" Utilisateurs uniques: {total_users}\n")
 
-print("📊 Statistiques globales:")
+print(" Statistiques globales:")
 for status, count in global_stats.items():
     print(f"- {status.capitalize()}: {count} ({(count / total_users * 100):.1f}%)")
 
-print("\n📈 Progression par page finale:")
+print("\n Progression par page finale:")
 for page in range(1, 8):
-    print(f"\n➡️ Page {page}:")
+    print(f"\n➡ Page {page}:")
     total = sum(page_stats[page].values())
     for status in status_list:
         count = page_stats[page][status]
         print(f"  - {status.capitalize()}: {count} ({(count / total * 100 if total > 0 else 0):.1f}%)")
 
-print("\n📅 Statistiques journalières:")
+print("\n Statistiques journalières:")
 for date, users in daily_stats:
-    print(f"\n🗓️ {date}:")
+    print(f"\n🗓 {date}:")
     daily_total = len(users)
     stats = {status: 0 for status in status_list}
     for user_data in users.values():
