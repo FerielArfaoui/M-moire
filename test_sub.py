@@ -163,51 +163,7 @@ for date, users in daily_stats:
             """, (date, status, 1))  # Chaque utilisateur est compté une fois par statut et par jour
         conn.commit()
 
-# Affichage des résultats dans la console
-total_users = len(user_progress)
-print(f"👥 Utilisateurs uniques: {total_users}\n")
 
-print("📊 Statistiques globales:")
-for status, count in global_stats.items():
-    print(f"- {status.capitalize()}: {count} ({(count / total_users * 100):.1f}%)")
-
-print("\n📈 Progression par page finale:")
-for page in range(1, 8):
-    print(f"\n➡️ Page {page}:")
-    total = sum(page_stats[page].values())
-    for status in status_list:
-        count = page_stats[page][status]
-        print(f"  - {status.capitalize()}: {count} ({(count / total * 100 if total > 0 else 0):.1f}%)")
-
-print("\n📅 Statistiques journalières:")
-for date, users in daily_stats:
-    print(f"\n🗓️ {date}:")
-    daily_total = len(users)
-    stats = {status: 0 for status in status_list}
-    for user_data in users.values():
-        stats[user_data['final_status']] += 1
-
-    for status in status_list:
-        count = stats[status]
-        print(f"  - {status.capitalize()}: {count} ({(count / daily_total * 100 if daily_total > 0 else 0):.1f}%)")
-
-# Visualisation graphique
-pages = list(range(1, 8))
-status_data = {status: [page_stats[page][status] for page in pages] for status in status_list}
-
-plt.figure(figsize=(12, 6))
-bottom = [0] * 7
-
-for status, color in zip(status_list, ['green', 'red', 'blue', 'orange']):
-    plt.bar(pages, status_data[status], bottom=bottom, label=status.capitalize(), color=color)
-    bottom = [i + j for i, j in zip(bottom, status_data[status])]
-
-plt.title("Répartition des statuts par page finale atteinte")
-plt.xlabel("Page finale atteinte")
-plt.ylabel("Nombre d'utilisateurs")
-plt.xticks(pages)
-plt.legend()
-plt.show()
 
 # Fermeture de la connexion PostgreSQL
 cursor.close()
