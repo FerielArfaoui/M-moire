@@ -104,7 +104,7 @@ if conn:
                     ], style={'width': '24%', 'backgroundColor': '#fff', 'padding': '10px', 'borderRadius': '10px'}),
 
                     html.Div([
-                        html.H4("Utilisateurs Actifs par Jour", style={'textAlign': 'center'}),
+                        html.H4("Utilisateurs Actifs ", style={'textAlign': 'center'}),
                         dcc.Graph(id='fig_active_users', config={'displayModeBar': False})
                     ], style={'width': '24%', 'backgroundColor': '#fff', 'padding': '10px', 'borderRadius': '10px'}),
 
@@ -126,7 +126,7 @@ if conn:
                     ], style={'width': '24%', 'backgroundColor': '#fff', 'padding': '10px', 'borderRadius': '10px'}),
 
                     html.Div([
-                        html.H4("Résumé des Événements par Utilisateur", style={'textAlign': 'center'}),
+                        html.H4("Résumé des Événements ", style={'textAlign': 'center'}),
                         dcc.Graph(id='fig_event_summary', config={'displayModeBar': False})
                     ], style={'width': '24%', 'backgroundColor': '#fff', 'padding': '10px', 'borderRadius': '10px'}),
 
@@ -191,7 +191,7 @@ if conn:
         fig_page.update_traces(textinfo='percent+label+value')
 
         fig_active_users = px.line(filtered_active_users, x='date', y='active_user_count', markers=True,
-                                   title="Utilisateurs Actifs par Jour")
+                                   title="Utilisateurs Actifs ")
 
         fig_avg_events = px.bar(filtered_avg_events, x='user', y='avg_events', text_auto=True,
                                 title="Moyenne des Événements par Session par Utilisateur")
@@ -210,7 +210,7 @@ if conn:
 
         event_totals = filtered_event_summary[['event_clicks', 'event_views', 'event_scrolls']].sum()
         fig_event_summary = px.pie(names=event_totals.index, values=event_totals.values, hole=0.4,
-                                   title="Résumé des Événements par Utilisateur")
+                                   title="Résumé des Événements ")
         fig_event_summary.update_traces(textinfo='percent+label+value')
 
         fig_total_duration = px.bar(filtered_total_duration, x='user', y='total_duration', text_auto=True,
@@ -224,4 +224,3 @@ if conn:
 
 else:
     print("Impossible de récupérer les données. Vérifie la connexion à la base de données.")
-
